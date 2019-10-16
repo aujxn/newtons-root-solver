@@ -14,16 +14,18 @@ struct Opt {
     #[structopt(short, long, default_value = "1.0")]
     imaginary: f64,
 
-    #[structopt(short, long, default_value = "20")]
-    iterations: usize,
+    #[structopt(long, default_value = "20")]
+    iter: usize,
 }
 
 fn main() {
     let opt = Opt::from_args();
 
     let guess = Complex::new(opt.real, opt.imaginary);
-    let iterations = opt.iterations;
+    let iterations = opt.iter;
     let polynomial = parse_poly(&opt.polynomial);
+
+    println!("{:?}", polynomial);
 
     let roots = newtons(polynomial, guess, iterations);
 
@@ -33,8 +35,8 @@ fn main() {
 }
 
 fn parse_poly(polynomial: &String) -> Vec<Complex<f64>> {
-    polynomial.split(", ").map(|x| {
-        let c: f64 = x.parse().unwrap_or_else(|_| panic!("newtons: error: failure to parse polynomial. expected format of c0, c1, ... , cn where c is a coeficient"));
+    polynomial.split(",").map(|x| {
+        let c: f64 = x.parse().unwrap_or_else(|_| panic!("newtons: error: failure to parse polynomial. expected format of c0,c1,...,cn where c is a coeficient"));
         Complex::new(c, 0.0)
     })
     .collect()
@@ -45,7 +47,7 @@ fn newtons(
     guess: Complex<f64>,
     iterations: usize,
 ) -> Vec<Complex<f64>> {
-    let error = 0.000000001;
+    let error = 0.0000000001;
 
     let mut roots: Vec<Complex<f64>> = vec![];
 
@@ -64,30 +66,41 @@ fn find_root(
     let degree = polynomial.len() - 1;
     let mut root = guess;
     let mut quotient: Vec<Complex<f64>> = Vec::with_capacity(degree + 1);
+    let mut deflated = vec![polynomial];
 
-    quotient.push(polynomial[0]);
-
-    for _ in 0..degree {
-        for _ in 0..iterations {
-            for (i, c) in polynomial.iter().skip(1).enumerate() {
+    for pass in 0..degree {
+    match (0..iterations).into_iter().find(|_| {
+        quotient.push(deflated[pass][0]);
+            for (i, c) in deflated[pass].iter().skip(1).enumerate() {
                 quotient.push(quotient[i] * root + c);
             }
+            println!("{:?}", quotient);
 
             let rem = quotient.last().unwrap();
-            if rem.re + rem.im < error {
+            println!("{:.8} rem: {:.5}", root, rem);
+            if num::abs(rem.re) + num::abs(rem.im) < error {
+                println!("found! {:?}", root);
                 roots.push(root);
                 quotient.pop();
-                break;
-            }
+                deflated.push(quotient.clone());
+                quotient.clear();
+                true
+            } else {
 
-            let fx = quotient.last().unwrap();
+            let fx = quotient.pop().unwrap();
             let slope = quotient
                 .iter()
                 .skip(1)
-                .fold(quotient[0], |s, c| root * s + c);
+                .fold(quotient[0], |s, c| (root * s) + c);
 
-            root = (fx / slope) - root;
+            root = root - (fx / slope);
+            quotient.clear();
+            false
+            }
+        }) {
+            Some(_) => (),
+            None => panic!("Failed to evaluate. Roots found: {:?}", roots),
         }
-        quotient.clear();
     }
-}
+
+    }
